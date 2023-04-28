@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes } = require('sequelize');
 const sequelize = require('../database');
+const products = require('./productsModels')
 
 const categories = sequelize.define('categories', {
     categories_ID: {
@@ -21,6 +22,7 @@ const categories = sequelize.define('categories', {
     }
 },{
     timestamps: false
-  });
+});
+
 
 module.exports = categories;

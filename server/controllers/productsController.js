@@ -1,6 +1,6 @@
 
 const products = require('../models/productsModels')
-const categories = require('../models/categoriesModel')
+const categories = require('../models/categoriesModel');
 module.exports = {
     addProduct: async (req, res) => {
         // let { name, description, price, category,isActive } = req.body
@@ -25,6 +25,7 @@ module.exports = {
         // const addProduct = await query(`INSERT INTO products VALUES (null,${db.escape(name)},${db.escape(description)},${db.escape(filename)},${db.escape(price)},${db.escape(isActive)},null,${db.escape(categoryId)})`)
         // return res.status(200).send({ message: 'Register Succes' })
         let { name, description, price, category, isActive } = req.body;
+        console.log(req.body);
         const product = await products.findOne({ where: { name } });
         const categoryQuery = await categories.findOne({ where: { category_name: category } });
         const categoryId = categoryQuery.categories_ID;
@@ -49,21 +50,33 @@ module.exports = {
           price,
           isActive,
           user_ID: null,
-          category_ID: categoryId,
+          categories_ID: categoryId,
         });
+        await addProduct.save();
     
         return res.status(200).send({ message: 'Product added successfully' });
     },
     addCategory: async (req, res) => {
-        const name = req.body.name
-        const categoryQuery = await query(`SELECT * FROM categories WHERE category_name=${db.escape(name)}`)
-        console.log(categoryQuery);
-        if (categoryQuery.length > 0) {
-            return res.status(200).send({ message: 'category already use' })
-            
-        }
-        const addCategory = await query(`INSERT INTO categories VALUES (null,${db.escape(name)},null)`)
-        return res.status(200).send({ message: 'category been added' })
+        const { name } = req.body;
+
+  try {
+    const existingCategory = await categories.findOne({
+      where: { category_name: name },
+    });
+
+    if (existingCategory) {
+      return res.status(200).send({ message: "Category already exists" });
+    }
+
+    const newCategory = await categories.create({
+      category_name: name,
+    });
+
+    return res.status(200).send({ message: "Category added" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send({ message: "Internal server error" });
+  }
         
     },
     editProduct: async (req, res) => {
@@ -99,10 +112,19 @@ module.exports = {
           if (!product) {
             return res.status(404).send({ message: 'Product not found' });
           }
+          let filename = null;
+          if (req.file) {
+            filename = '/' + req.file.filename;
+          }
+      
+          if (!isActive) {
+            isActive = true;
+          }
           
           await product.update({
             name,
             description,
+            image:filename,
             price,
             isActive,
           });
@@ -114,22 +136,102 @@ module.exports = {
         }
     },
     editCategories: async (req, res) => {
-        const idCat = parseInt(req.params.id)
-        const {name} = req.body
-        console.log(name);
-        await query(`UPDATE categories SET category_name = ${db.escape(name)} WHERE categories_ID = ${db.escape(idCat)}`)
-        return res.status(200).send({message:"update succes"})
+        const idCat = parseInt(req.params.id);
+  const { name } = req.body;
+
+  try {
+    const category = await categories.findByPk(idCat);
+
+    if (!category) {
+      return res.status(404).send({ message: "Category not found" });
+    }
+
+    category.category_name = name;
+    await category.save();
+
+    return res.status(200).send({ message: "Update successful" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send({ message: "Internal server error" });
+  }
     },
     fetchProducts: async (req, res) => {
-        try {
-            const productList = await products.findAll() ;
-            return res.status(200).send(productList);
-          } catch (error) {
-            console.error(error);
-            return res.status(500).send({ message: 'Internal server error' });
+      const { page, sort, order } = req.body;
+      console.log(page);
+      try {
+        let productList;
+        if (sort && order) {
+          let orderBy = 'name';
+          let sortOrder = 'ASC';
+          if (sort === 'price') {
+            orderBy = 'price';
           }
-    }, sortProducts: async (req, res) => {
-        
+          if (order === 'DESC') {
+            sortOrder = 'DESC';
+          }
+          productList = await products.findAll({
+            limit: 9,
+            offset: page,
+            order: [[orderBy, sortOrder]],
+          });
+        } else {
+          productList = await products.findAll({
+            limit: 9,
+            offset: page,
+          });
+        }
+        return res.status(200).send(productList);
+      } catch (error) {
+        console.error(error);
+        return res.status(500).send({ message: 'Internal server error' });
+      }
+    },
+  filterProducts: async (req, res) => {
+    const categoryName = req.body.category
+      
+        const filteredProducts = await products.findAll({
+            include: {
+              model: categories, 
+          }, where: { '$category.category_name$': categoryName },
+          attributes: {exclude: ['category']}
+            
+        });
+        return res.status(200).send({filteredProducts})
+          
+  },deleteProduct: async (req, res) => {
+      const idProduct = parseInt(req.params.id)
+      
+    
+    try {
+      const product = await products.destroy({
+        where: {
+          product_ID: idProduct
+        }
+      })
+      
+      if (product) {
+        res.status(200).json({ message: `Product with ID ${idProduct} has been deleted` })
+      } else {
+        res.status(404).json({ error: `Product with ID ${idProduct} not found` })
+      }
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message })
     }
+  }, fetchCategories: async (req, res) => {
+    try {
+      const categoriesList = await categories.findAll() ;
+      return res.status(200).send(categoriesList);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).send({ message: 'Internal server error' });
+    }
+  },
+  fetchAllData: async (req, res) => {
+    const allProducts = await products.findAll()
+    return res.status(200).send(allProducts)
+       
+     }
+  
 
 }
